@@ -1,65 +1,111 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 
 <head>
-    <meta http-equiv="Content-Type" content="text/html;charset=UTF-8">
-    <title>Read Text File</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Read Excel/CSV File to JSON</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.17.0/xlsx.full.min.js"></script> <!-- SheetJS for Excel handling -->
 </head>
 
 <body>
-    <input type="file" name="inputfile" id="inputfile">
-    <br>
-
+    <h2>Upload Excel or CSV File</h2>
+    <input type="file" id="inputfile" accept=".csv, .xls, .xlsx">
+    <br><br>
+    <button id="download" style="display: none;">Download JSON</button>
+    <br><br>
     <div id="output"></div>
 
     <script type="text/javascript">
-        document.getElementById('inputfile')
-            .addEventListener('change', function () {
-                var fr = new FileReader();
-                fr.onload = function () {
-                    // document.getElementById('output')
-                    //     .textContent = fr.result;
+        let jsonData = null;  // To store the JSON data for download
 
-                    document.getElementById('output').innerHTML = csvJSON(fr.result)
+        document.getElementById('inputfile').addEventListener('change', handleFile);
+        document.getElementById('download').addEventListener('click', downloadJSON);
 
-                    console.log(csvJSON(fr.result))
-                }
-
-                fr.readAsText(this.files[0], 'ISO-8859-1');
-            })
-
-
-
-        //var csv is the CSV file with headers
-            function csvJSON(csv) {
-
-                var lines = csv.split("\n");
-
-                var result = [];
-
-                // NOTE: If your columns contain commas in their values, you'll need
-                // to deal with those before doing the next step 
-                // (you might convert them to &&& or something, then covert them back later)
-                // jsfiddle showing the issue https://jsfiddle.net/
-                var headers = lines[0].split(",");
-                console.log(headers)
-
-                for (var i = 1; i < lines.length; i++) {
-
-                    var obj = {};
-                    var currentline = lines[i].split(",");
-
-                    for (var j = 0; j < headers.length; j++) {
-                        obj[headers[j]] = currentline[j];
-                    }
-
-                    result.push(obj);
-
-                }
-
-              //  return result; //JavaScript object
-                return JSON.stringify(result); //JSON
+        function handleFile(event) {
+            const file = event.target.files[0];
+            if (!file) {
+                alert("No file selected.");
+                return;
             }
+
+            const fileExtension = file.name.split('.').pop().toLowerCase();
+
+            if (fileExtension === 'csv') {
+                processCSV(file);
+            } else if (fileExtension === 'xls' || fileExtension === 'xlsx') {
+                processExcel(file);
+            } else {
+                alert("Unsupported file format. Please upload a CSV or Excel file.");
+            }
+        }
+
+        // Process CSV file
+        function processCSV(file) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const csv = e.target.result;
+                jsonData = csvToJSON(csv);  // Store JSON data for download
+                document.getElementById('output').textContent = JSON.stringify(jsonData, null, 2); // Pretty print JSON
+                document.getElementById('download').style.display = 'inline'; // Show download button
+            };
+            reader.onerror = function () {
+                alert("Error reading file");
+            };
+            reader.readAsText(file, 'ISO-8859-1');
+        }
+
+        // Convert CSV to JSON
+        function csvToJSON(csv) {
+            const lines = csv.trim().split("\n");
+            const headers = lines[0].split(",").map(header => header.trim());
+            const result = lines.slice(1).map(line => {
+                const values = line.split(",").map(value => value.trim());
+                return headers.reduce((obj, header, index) => {
+                    obj[header] = values[index] || ""; // Handle empty values
+                    return obj;
+                }, {});
+            });
+            return result;
+        }
+
+        // Process Excel file using SheetJS
+        function processExcel(file) {
+            const reader = new FileReader();
+            reader.onload = function (e) {
+                const data = new Uint8Array(e.target.result);
+                const workbook = XLSX.read(data, { type: 'array' });
+
+                // Assuming the first sheet is the one to parse
+                const sheetName = workbook.SheetNames[0];
+                const worksheet = workbook.Sheets[sheetName];
+
+                jsonData = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
+                document.getElementById('output').textContent = JSON.stringify(jsonData, null, 2);
+                document.getElementById('download').style.display = 'inline'; // Show download button
+            };
+            reader.onerror = function () {
+                alert("Error reading Excel file");
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        // Function to download the JSON data as a file
+        function downloadJSON() {
+            if (!jsonData) {
+                alert("No data to download.");
+                return;
+            }
+
+            const blob = new Blob([JSON.stringify(jsonData, null, 2)], { type: "application/json" });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'data.json'; // File name
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a); // Clean up
+        }
     </script>
 </body>
 
